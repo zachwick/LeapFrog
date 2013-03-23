@@ -13,29 +13,32 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Princeton Ferro <http://gitlhub.com/Prince781>");
 MODULE_DESCRIPTION("Provides minimal Linux support for the Leap Motion sensor.");
 
+char *modName = "leapmotiond"; //this is the module name
+
 static dev_t first; //first device number
 static struct cdev c_dev; //character device - Leap Motion
 static struct class *cl; //device class
 char *devName = "";
-int times_opened = 0;
+int num_leaps = -1; //current number of Leap Motion devices attached (-1 == 0)
+int times_opened[4]; //we can assume a maximum of four devices attached
 
 static int leapd_open(struct inode *inod, struct file *fil) {
-	printk(KERN_INFO "Leap Motion accessed at interval %d.\n", ++times_opened);
+	printk(KERN_INFO "%s: Leap Motion accessed at interval %d.\n", modName, ++times_opened);
 	return 0;
 }
 
 static ssize_t leapd_read(struct file *filp, char *buff, size_t len, loff_t *off) {
-	printk(KERN_INFO "Leap Motion is being read.\n");
+	printk(KERN_INFO "%s: Leap Motion is being read.\n", modName);
 	return 0;
 }
 
-static ssize_t leapd_write(struct file *filp,const char *buff,size_t len,loff_t *off) {
-	printk(KERN_INFO "Leap Motion is being written to.\n");
+static ssize_t leapd_write(struct file *filp, const char *buff, size_t len, loff_t *off) {
+	printk(KERN_INFO "%s: Leap Motion is being written to.\n", modName);
 	return len;
 }
 
 static int leapd_rls(struct inode * indo, struct file *fil) {
-	printk(KERN_INFO "Leap Motion released.\n");
+	printk(KERN_INFO "%s: Leap Motion released.\n", modName);
 	return 0;
 }
 
@@ -48,14 +51,14 @@ static struct file_operations fops = {
 };
 
 static int __init leapmotiond_init(void) {
-	printk(KERN_INFO "leapmotiond registered.");
+	printk(KERN_INFO "%s: registered.", modName);
 	if (alloc_chrdev_region(&first, 81, 1, "Leap Dev Kit") < 0)
 		return -1;
-	if ((cl = class_create(THIS_MODULE, "chardrv")) == NULL) {
+	if ((cl = class_create(THIS_MODULE, "leapfrog")) == NULL) {
 		unregister_chrdev_region(first, 1);
 		return -1;
 	}
-	if (device_create(cl, NULL, first, NULL, "leap_null") == NULL) {
+	if (device_create(cl, NULL, first, NULL, "leapmotion") == NULL) {
 		class_destroy(cl);
 		unregister_chrdev_region(first, 1);
 		return -1;
@@ -75,7 +78,7 @@ static void __exit leapmotiond_exit(void) {
 	device_destroy(cl, first);
 	class_destroy(cl);
 	unregister_chrdev_region(first, 1); //unregister device
-	printk(KERN_INFO "leapmotiond unregistered.");
+	printk(KERN_INFO "%s: unregistered.", modName);
 }
 
 module_init(leapmotiond_init);
