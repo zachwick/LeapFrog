@@ -1,18 +1,8 @@
 # Makefile - build out LeapMotionD 
+obj-m = leapmotiond.o
 
-# if KERNELRELEASE is defined, we can use the language,
-# as we've been invoked from the kernel build system
-ifneq (${KERNELRELEASE},)
-	obj-m := leapmotiond.o
-# otherwise, we were called directly from the command line
-# invoke the kernel build system
-else
-	KERNEL_SOURCE := /usr/src/kernels/`uname -r`/   # rely on any installed kernel sources
-	PWD := $(shell pwd)
-default:
-	${MAKE} -C ${KERNEL_SOURCE} SUBDIRS=${PWD} modules
-	
+all:
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+
 clean:
-	${MAKE} -C ${KERNEL_SOURCE} SUBDIRS=${PWD} clean
-endif
-
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
