@@ -8,23 +8,45 @@
 *********************************************/
 
 #include <linux/module.h>
-#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/usb.h>
-#include <linux/types.h>
-#include <linux/kdev_t.h>
-#include <linux/fs.h>
-#include <linux/device.h>
-#include <linux/cdev.h>
 
+#define MIN(a,b) (((a) <= (b)) ? (a) : (b))
 #define MODULE_NAME "leapmotion"
 #define LEAP_VENDOR_ID 0xf182
 #define LEAP_PRODUCT_ID 0x0003
 
 static struct usb_device *device;
-static dev_t leapdev; //leap device number
-static struct cdev c_dev; //leap device structure
-static struct class *cl; //leap device class
+static struct usb_class_driver class;
+
+/*** BASIC FILE OPERATIONS IN /dev/leapmotion ***/
+
+static int leapmotion_open(struct inode *i, struct file *f) {
+	printk(KERN_INFO "%s: Opening /dev/leapmotion\n", MODULE_NAME);
+	return 0;
+}
+
+static int leapmotion_close(struct inode *i, struct file *f) {
+	printk(KERN_INFO "%s: Closing /dev/leapmotion\n", MODULE_NAME);
+	return 0;
+}
+
+static ssize_t leapmotion_read(struct file *f, char __user *buf, size_t len, loff_t *off) {
+	printk(KERN_INFO "%s: Reading /dev/leapmotion\n", MODULE_NAME);
+	return 0;
+}
+
+static ssize_t leapmotion_write(struct file *f, const char __user *buf, size_t len, loff_t *off) {
+	printk(KERN_INFO "%s: Writing to /dev/leapmotion\n", MODULE_NAME);
+	return 0;
+}
+
+static struct file_operations fops = {
+	.open = leapmotion_open,
+	.release = leapmotion_close,
+	.read = leapmotion_read,
+	.write = leapmotion_write
+};
 
 //basic plug function
 static int leapmotion_probe(struct usb_interface *interface, const struct usb_device_id *id) {
@@ -40,7 +62,16 @@ static int leapmotion_probe(struct usb_interface *interface, const struct usb_de
 	}
 	
 	device = interface_to_usbdev(interface);
-	return 0;
+	
+	int retval;
+	
+	class.name = "usb/leapmotion%d";
+	class.fops = &fops;
+	if ((retval = usb_register_dev(interface, &class)) < 0)
+		printk(KERN_INFO "%s: Unable to get a minor for this device.", MODULE_NAME);
+	else printk(KERN_INFO "%s: Minor obtained: %d\n", MODULE_NAME, interface->minor);
+	
+	return retval;
 }
 
 //basic unplug function
@@ -48,6 +79,7 @@ static void leapmotion_disconnect(struct usb_interface *interface) {
 	struct usb_host_interface *iface_desc;
 	iface_desc = interface->cur_altsetting;
 	printk(KERN_INFO "%s: Leap Motion interface %d removed.\n", MODULE_NAME, iface_desc->desc.bInterfaceNumber);
+	usb_deregister_dev(interface, &class);
 }
 
 // table of device IDs
@@ -65,67 +97,12 @@ static struct usb_driver leapmotion_driver = {
 	.disconnect = leapmotion_disconnect
 };
 
-/*** BASIC FILE OPERATIONS IN /dev/leapmotion ***/
-
-static int leapmotion_open(struct inode *i, struct file *f) {
-	printk(KERN_INFO "Opening /dev/leapmotion\n");
-	return 0;
-}
-
-static int leapmotion_close(struct inode *i, struct file *f) {
-	printk(KERN_INFO "Closing /dev/leapmotion\n");
-	return 0;
-}
-
-static ssize_t leapmotion_read(struct file *f, char __user *buf, size_t len, loff_t *off) {
-	printk(KERN_INFO "Reading /dev/leapmotion\n");
-	return 0;
-}
-
-static ssize_t leapmotion_write(struct file *f, const char __user *buf, size_t len, loff_t *off) {
-	printk(KERN_INFO "Writing to /dev/leapmotion\n");
-	return 0;
-}
-
-static struct file_operations fops = {
-	.owner = THIS_MODULE,
-	.open = leapmotion_open,
-	.release = leapmotion_close,
-	.read = leapmotion_read,
-	.write = leapmotion_write
-};
-
 static int __init leapmotion_init(void) { //on module load
-	printk("%s: Registered LeapMotion driver.\n", MODULE_NAME);
-	if (usb_register(&leapmotion_driver) < 0)
-		return -1;
-	if (alloc_chrdev_region(&leapdev, 150, 1, "Leap Dev Kit") < 0)
-		return -1;
-	if ((cl = class_create(THIS_MODULE,"chardrv")) == NULL) {
-		unregister_chrdev_region(leapdev, 1);
-		return -1;
-	}
-	if (device_create(cl, NULL, leapdev, NULL, "leapmotion") == NULL) {
-		class_destroy(cl);
-		unregister_chrdev_region(leapdev, 1);
-		return -1;
-	}
-	cdev_init(&c_dev, &fops);
-	if (cdev_add(&c_dev, leapdev, 1) == -1) {
-		device_destroy(cl, leapdev);
-		class_destroy(cl);
-		unregister_chrdev_region(leapdev, 1);
-		return -1;
-	}
-	return 0;
+	return usb_register(&leapmotion_driver); //register with USB subsystem
 }
 
 static void __exit leapmotion_exit(void) { //on module deregister
-	cdev_del(&c_dev); //delete character driver
-	device_destroy(cl, leapdev);
-	class_destroy(cl);
-	unregister_chrdev_region(leapdev, 1);
-	usb_deregister(&leapmotion_driver);
+	usb_deregister(&leapmotion_driver); //deregister with USB subsystem
 }
 
 // module information
